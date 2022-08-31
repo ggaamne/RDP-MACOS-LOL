@@ -1,42 +1,25 @@
-name: MACOS
+name: Macos
 
-on:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   ssh:
+
     runs-on: macos-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: SSH Keepalive Hack
-      run: |
-        mkdir -p ~/.ssh
-        cat << EOF > ~/.ssh/config
-        Host *
-            ServerAliveInterval 60
-            StrictHostKeyChecking no
-        Host github.com
-            User git
-            Port 22
-            Hostname github.com
-            TCPKeepAlive yes
-            IdentitiesOnly yes
-        EOF
-    - name: Start SSH via ngrok
-      continue-on-error: true
-      timeout-minutes: 99999999999999999999999999999999999999999999999999
-      uses: P3TERX/ssh2actions@main
-      with:
-        mode: ngrok
+    - name: Download
+      run: Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+    - name: Extract
+      run: Expand-Archive ngrok.zip
+    - name: Auth
+      run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
       env:
-        # You can find this token here: https://dashboard.ngrok.com/auth/your-authtoken
-        NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
-        # ngrok server region [us, eu, au, ap, sa, jp, in] (optional, default: us)
-        NGROK_REGION: us
-        # This password you will use when authorizing via SSH
-        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-        # Send connection info to Telegram (optional)
-        #TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        #TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+    - name: Enable TS
+      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
+    - name: Create Tunnel
+      run: .\ngrok\ngrok.exe tcp 3389
